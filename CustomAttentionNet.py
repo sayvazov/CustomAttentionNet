@@ -34,13 +34,43 @@ def listTest():
                 dE = layer.update(res[i], dE)
         print(IterationError)
 
+
+def lstmTest():
+    data = np.random.random((100, 2))
+    labels = np.array(list(map(test, data)))
+    lstm = layers.lstmLayer(2, 1)
+    out = layers.sumSquareError()
+    for iteration in range(100):
+        IterationError = 0.0
+        for datum, label in zip(data, labels):
+            res = []
+        
+            for i in range(10):
+                res.append(lstm.eval(datum))
+            E = out.eval(res[-1], label)
+            IterationError += E
+            dE = out.inputDerivatives(res[-1], label)
+            Dinput, Dprev, Dweights, Dbiases = lstm.update(datum, dE)
+            for i in range(9, 0, -1):
+                Dinput, Dprev, Dweight, Dbias = lstm.update(datum, Dprev)
+                Dweights += Dweight
+                Dbiases += Dbias
+            #print("Weights ",lstm.weights)
+            #print("Delta Weights", Dweights)
+            print("bias ",lstm.bias)
+            print("Delta bias", Dbiases)
+            lstm.weights += 0.1*Dweights
+            lstm.bias += 0.1*Dbiases
+            print("iteration i: ", IterationError)
+
 data = np.random.random((100, 2))
 labels = np.array(list(map(test, data)))
 
 arr = [[1,2],[3,4]]
-print(np.pad(arr, 2, 'constant', constant_values=0))
 
-listTest()
+lstmTest()
+
+
 #conv = layers.convLayer(3, 1, weights=np.array([[[.1,.2,.3],[.4,.5,.6], [.7,.8,.9]]]), bias = [0])
 #testData = np.array([[0.0,1,], [4,5]])
 #outputDers = np.array([[[1,1], [2,1]]])
