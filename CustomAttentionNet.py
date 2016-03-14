@@ -55,13 +55,9 @@ def lstmTest():
                 Dinput, Dprev, Dweight, Dbias = lstm.update(datum, Dprev)
                 Dweights += Dweight
                 Dbiases += Dbias
-            #print("Weights ",lstm.weights)
-            #print("Delta Weights", Dweights)
-            print("bias ",lstm.bias)
-            print("Delta bias", Dbiases)
             lstm.weights += 0.1*Dweights
             lstm.bias += 0.1*Dbiases
-            print("iteration i: ", IterationError)
+        print("iteration", iteration, ": ", IterationError)
 
 data = np.random.random((100, 2))
 labels = np.array(list(map(test, data)))
