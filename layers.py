@@ -215,4 +215,12 @@ class sumSquareError(resultLayer):
     def inputDerivatives(self, guess, answer):
         return 2*(answer - guess)
 
-
+class softMax(layer):
+	def __init__(self):
+		return
+	def eval(self, input):
+		num = np.exp(input)
+		return num / num.sum()
+	def inputDerivatives(self, input, outputDerivatives):
+		out = self.eval(input)
+		return outputDerivatives*out*(1 - out)
