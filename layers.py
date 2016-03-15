@@ -10,8 +10,11 @@ class layer:
         return input
     def inputDerivatives(self, input, outputDerivatives):
         return np.ones_like(input)
-    def update(self, input, outputDerivatives):
+    def setUpdate(self, input, outputDerivatives):
         return self.inputDerivatives(input, outputDerivatives)
+    def doUpdate(self):
+        return
+        
 
 
 class weightLayer(layer):
@@ -19,12 +22,17 @@ class weightLayer(layer):
         return 0
     def biasDerivative(self, input, outputDerivatives):
         return 0
-    def update(self, input, outputDerivatives):
+    def setUpdate(self, input, outputDerivatives):
         dW = self.weightDerivatives(input, outputDerivatives)
         dB = self.biasDerivative(input, outputDerivatives)
-        self.weights += learningRate*dW
-        self.bias += learningRate*dB
+        self.weightUpdates += dW
+        self.biasUpdates += dB
         return self.inputDerivatives(input, outputDerivatives)
+    def doUpdate(self):
+        self.weights += learningRate * self.weightUpdates
+        self.bias += learningRate * self.biasUpdates
+        self.weightUpdates.fill(0)
+        self.biasUpdates.fill(0)
 
 class combineLayer(layer):
     pass
@@ -35,7 +43,7 @@ class resultLayer(layer):
 
 
 class lstmLayer(weightLayer):
-    def __init__(self, inputSize, outputSize, weights=None, biases=None):
+    def __init__(self, inputSize, outputSize, weights=None, bias=None):
         if weights == None:
             Wi = np.random.normal(size=(inputSize, inputSize))
             Wf = np.random.normal(size=(inputSize, inputSize))
@@ -45,9 +53,8 @@ class lstmLayer(weightLayer):
             Uf = np.random.normal(size=(inputSize, inputSize))
             Uc = np.random.normal(size=(inputSize, inputSize))
             Uo = np.random.normal(size=(inputSize, inputSize))
-            Vo = np.random.normal(size=(inputSize, inputSize))
             
-            self.weights = np.array([Wi, Wf, Wc, Wo, Ui, Uf, Uc, Uo, Vo])
+            self.weights = np.array([Wi, Wf, Wc, Wo, Ui, Uf, Uc, Uo])
         else:
             self.weights = weights
         if bias == None:
@@ -60,21 +67,74 @@ class lstmLayer(weightLayer):
             self.bias = bias
         self.cell = np.zeros(inputSize)
         self.hidden = np.zeros(inputSize)
+        self.prevHidden = np.zeros(inputSize)
         self.sig = sigmoid()
-        self.tanh = tanh()
+        self.tan = tanh()
+        self.weightUpdates = np.zeros_like(self.weights)
+        self.biasUpdates = np.zeros_like(self.bias)
+        return 
 
     def eval(self, input):
-        inputGate =  self.sig.eval(self.weights[0]*input + self.hidden * self.weights[4] + self.bias[0])
-        forgetGate = self.sig.eval(self.weights[1]*input + self.hidden * self.weights[5] + self.bias[1])
-        candidates= self.tanh.eval(self.weights[2]*input + self.hidden * self.weights[6] + self.bias[2])
-        self.cell =  self.cell*forgetGate + candidates*inputGate
-        outputGate = self.sig.eval(self.weights[3]*input + self.hidden * self.weights[7] + self.bias[3])
-        transformed = self.tanh.eval(self.cell)
-        self.hidden = outputGate*transformed
+        self.inputSum       = np.dot(self.weights[0],input) + np.dot(self.hidden, self.weights[4]) + self.bias[0]
+        self.forgetSum      = np.dot(self.weights[1],input) + np.dot(self.hidden, self.weights[5]) + self.bias[1]
+        self.candidateSum   = np.dot(self.weights[2],input) + np.dot(self.hidden, self.weights[6]) + self.bias[2]
+        self.outputSum      = np.dot(self.weights[3],input) + np.dot(self.hidden, self.weights[7]) + self.bias[3]
+
+        self.inputGate  = self.sig.eval(self.inputSum) #
+        self.forgetGate = self.sig.eval(self.forgetSum) #
+        self.candidates = self.tan.eval(self.candidateSum) #
+        self.outputGate = self.sig.eval(self.outputSum) #
+
+        self.prevCell = self.cell #
+        self.cell =  self.prevCell*self.forgetGate + self.candidates*self.inputGate#
+        self.transformed = self.tan.eval(self.cell) #
+        self.prevHidden = self.hidden #
+        self.hidden = self.outputGate*self.transformed 
+
         return self.hidden
 
-    def update(self, input, outputDerivatives):
-        pass
+    def setUpdate(self, input, outputDerivatives):
+        #calculate weight derivatives
+        DOutputGate = self.transformed*outputDerivatives
+        DTransformed = self.outputGate*outputDerivatives
+        Dcell = self.tan.inputDerivatives(self.cell, DTransformed)
+        DForgetGate = Dcell*self.prevCell
+        DInputGate  = Dcell*self.candidates
+        DprevCell   = Dcell*self.forgetGate
+        DCandidates = Dcell*self.inputGate
+
+        DOutputSum  = self.sig.inputDerivatives(self.outputSum, DOutputGate)
+        DForgetSum      = self.sig.inputDerivatives(self.forgetSum, DForgetGate)
+        DInputSum       = self.sig.inputDerivatives(self.inputSum, DInputGate)
+        DCandidateSum   = self.tan.inputDerivatives(self.candidateSum, DCandidates)
+
+        DWi = np.outer(DInputSum, input)
+        DWf = np.outer(DForgetSum, input)
+        DWc = np.outer(DCandidateSum, input)
+        DWo = np.outer(DOutputSum, input)
+
+        DUi = np.outer(DInputSum, self.prevHidden)
+        DUf = np.outer(DForgetSum, self.prevHidden)
+        DUc = np.outer(DCandidateSum, self.prevHidden)
+        DUo = np.outer(DOutputSum, self.prevHidden)
+
+        Dbi = DInputSum
+        Dbf = DForgetSum
+        Dbc = DCandidateSum
+        Dbo = DOutputSum
+
+        Dinput      = np.dot(DInputSum, self.weights[0]) + np.dot(DForgetSum, self.weights[1]) + np.dot(DCandidateSum, self.weights[2]) + np.dot(DOutputSum, self.weights[3])
+        DprevHidden = np.dot(DInputSum, self.weights[4]) + np.dot(DForgetSum, self.weights[5]) + np.dot(DCandidateSum, self.weights[6]) + np.dot(DOutputSum, self.weights[7])
+
+        Dweights = np.array([DWi, DWf, DWc, DWo, DUi, DUf, DUc, DUo])
+        Dbias = np.array([Dbi, Dbf, Dbc, Dbo])
+
+        self.weightUpdates += Dweights
+        self.biasUpdates += Dbias
+
+        return Dinput, DprevHidden
+
+
 
 
 class denseLayer (weightLayer):
@@ -99,8 +159,9 @@ class denseLayer (weightLayer):
         elif len(self.bias) != outputSize:
             self.bias = np.random.normal(size=outputSize)
             print("Bias was wrong size. Defaulting to random bias for ", self.name)
-
-        return 
+        self.weightUpdates = np.zeros_like(self.weights)
+        self.biasUpdates = np.zeros_like(self.bias)
+        return
     
     def eval(self, input):
         return np.dot(input, self.weights)+ self.bias
@@ -126,6 +187,9 @@ class convLayer(weightLayer):
             self.bias = np.random.normal(size=numFilters)
         else:
             self.bias = bias
+        self.weightUpdates = np.zeros_like(self.weights)
+        self.biasUpdates = np.zeros_like(self.bias)
+        return super.__init__(self)
     def eval(self, input):
         padded = np.pad(input,int(self.kernelSize/2) ,'constant', constant_values=0)
         print(padded) 
@@ -190,8 +254,8 @@ class sigmoid(layer):
         return outputDerivatives*out*(1-out)
 
 class tanh(layer):
-    def __init(self):
-        return
+    def __init__(self):
+        pass
     def eval(self, input):
         return np.tanh(input)
     def inputDerivatives(self, input, outputDerivatives):
