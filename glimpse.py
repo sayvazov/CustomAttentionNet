@@ -1,6 +1,6 @@
 import numpy as np
 
-def takeGlismple(input, heightStart, widthStart, size):
+def takeGlimpse(input, heightStart, widthStart, size):
     height = len(input)-size
     width = len(input[0])-size
     rowStart = int(heightStart*height)

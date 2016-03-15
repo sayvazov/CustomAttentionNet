@@ -1,10 +1,10 @@
 import numpy as np
 from functools import reduce
 
-learningRate = 0.1
+learningRate = 0.001
 
 class layer: 
-    def __init__():
+    def __init__(self):
         return
     def eval(self, input):
         return input
@@ -25,17 +25,20 @@ class weightLayer(layer):
     def setUpdate(self, input, outputDerivatives):
         dW = self.weightDerivatives(input, outputDerivatives)
         dB = self.biasDerivative(input, outputDerivatives)
+        #print("Weights ", self.weights.shape)
+        #print("Update ", dW.shape)
         self.weightUpdates += dW
         self.biasUpdates += dB
         return self.inputDerivatives(input, outputDerivatives)
-    def doUpdate(self):
-        self.weights += learningRate * self.weightUpdates
-        self.bias += learningRate * self.biasUpdates
+    def doUpdate(self, lr = learningRate):
+        self.weights += lr * self.weightUpdates
+        self.bias += lr * self.biasUpdates
         self.weightUpdates.fill(0)
         self.biasUpdates.fill(0)
 
 class combineLayer(layer):
-    pass
+    def setUpdate(self, first, second, outputDerivatives):
+        return self.inputDerivatives(first, second, outputDerivatives)
 
 class resultLayer(layer):
     def inputDerivatives(self, guess, answer):
@@ -75,10 +78,10 @@ class lstmLayer(weightLayer):
         return 
 
     def eval(self, input):
-        self.inputSum       = np.dot(self.weights[0],input) + np.dot(self.hidden, self.weights[4]) + self.bias[0]
-        self.forgetSum      = np.dot(self.weights[1],input) + np.dot(self.hidden, self.weights[5]) + self.bias[1]
-        self.candidateSum   = np.dot(self.weights[2],input) + np.dot(self.hidden, self.weights[6]) + self.bias[2]
-        self.outputSum      = np.dot(self.weights[3],input) + np.dot(self.hidden, self.weights[7]) + self.bias[3]
+        self.inputSum       = np.dot(input, self.weights[0]) + np.dot(self.hidden, self.weights[4]) + self.bias[0]
+        self.forgetSum      = np.dot(input, self.weights[1]) + np.dot(self.hidden, self.weights[5]) + self.bias[1]
+        self.candidateSum   = np.dot(input, self.weights[2]) + np.dot(self.hidden, self.weights[6]) + self.bias[2]
+        self.outputSum      = np.dot(input, self.weights[3]) + np.dot(self.hidden, self.weights[7]) + self.bias[3]
 
         self.inputGate  = self.sig.eval(self.inputSum) #
         self.forgetGate = self.sig.eval(self.forgetSum) #
@@ -134,11 +137,9 @@ class lstmLayer(weightLayer):
 
         return Dinput, DprevHidden
 
-
-
-
 class denseLayer (weightLayer):
     def __init__(self, inputSize, outputSize, weights =None, bias = None):
+        self.outputSize = outputSize
         if weights == None:
             self.weights = np.random.normal(size=(inputSize, outputSize))
         else:
@@ -155,7 +156,7 @@ class denseLayer (weightLayer):
         else:
             self.bias = bias
         if outputSize == 1:
-            return
+            pass
         elif len(self.bias) != outputSize:
             self.bias = np.random.normal(size=outputSize)
             print("Bias was wrong size. Defaulting to random bias for ", self.name)
@@ -176,11 +177,12 @@ class denseLayer (weightLayer):
         return outputDerivatives
 
 class convLayer(weightLayer):
-    def __init__(self, kernelSize, numFilters, weights=None, bias = None):
+    def __init__(self, kernelSize, numFilters, numChannels, weights=None, bias = None):
         self.kernelSize = kernelSize
         self.numFilters = numFilters
+        self.numChannels = numChannels
         if weights == None:
-            self.weights = np.random.normal(size=( numFilters, kernelSize, kernelSize))
+            self.weights = np.random.normal(size=( numFilters, numChannels,  kernelSize, kernelSize))
         else:
             self.weights = weights
         if bias == None: 
@@ -189,52 +191,77 @@ class convLayer(weightLayer):
             self.bias = bias
         self.weightUpdates = np.zeros_like(self.weights)
         self.biasUpdates = np.zeros_like(self.bias)
-        return super.__init__(self)
+        return
+
     def eval(self, input):
-        padded = np.pad(input,int(self.kernelSize/2) ,'constant', constant_values=0)
-        print(padded) 
-        res = np.array([np.zeros_like(input) for i in range(self.numFilters)])
-        for filter in range(self.numFilters):
-            for i in range(len(input)):
-                for j in range(len(input[0])):
-                    sum = 0.0
-                    for row in range(self.kernelSize):
-                        for col in range(self.kernelSize):
-                            sum += padded[i+row, j+col]* self.weights[filter, row, col]
-                    res[filter, i, j] = sum
+        w = int(self.kernelSize/2)
+        padded = np.pad(input,((0,0), (w, w), (w,w)), 'constant', constant_values=0)
+        res = np.array([np.zeros_like(input[0]) for i in range(self.numFilters)])
+        for f in range(self.numFilters):
+            for i in range (len(input[0])):
+                for j in range(len(input[0][0])):
+                    res[f][i][j] = np.sum(self.weights[f]*padded[: ,i:i+self.kernelSize, j: j+self.kernelSize]) + self.bias[f]
         return res
     def weightDerivatives(self, input, outputDerivatives):
-        padded = np.pad(input,int(self.kernelSize/2) ,'constant', constant_values=0)
         w = int(self.kernelSize/2)
+        padded = np.pad(input,((0,0), (w, w), (w,w)), 'constant', constant_values=0)
         res = np.zeros_like(self.weights)
-        for filter in range(self.numFilters):
-            for row in range(self.kernelSize):
-                for col in range(self.kernelSize):
-                    sum = 0 
-                    for i in range(len(input)):
-                        for j in range(len(input[0])):
-                            sum+=outputDerivatives[filter, i,j]*padded[i+row,j+col]
-                    res[filter, row, col] += sum
+        for f in range(self.numFilters):
+            for c in range(self.numChannels):
+                for row in range(self.kernelSize):
+                    for col in range(self.kernelSize):
+                        sum = 0
+                        for i in range(len(input[0])):
+                            for j in range(len(input[0][0])):
+                                thing1 = outputDerivatives[f] [i] [j]
+                                thing2 = padded[c, i+row,j+col]
+                                sum+=thing1*thing2
+                        res[f, c, row, col] = sum
         return res
+        #for filter in range(self.numFilters):
+        #    for row in range(self.kernelSize):
+        #        for col in range(self.kernelSize):
+        #            for c in range(len(input)):
+        #                sum = 0 
+        #                for i in range(len(input[0])):
+        #                    for j in range(len(input[0][0])):
+        #                        sum+=outputDerivatives[filter, i,j]*padded[c, i+row,j+col]
+        #                res[filter, row, col] += sum
+        #return res
 
 
     def biasDerivative(self, input, outputDerivatives):
-        return np.sum(outputDerivatives, axis=0)
+        res = np.zeros(self.numFilters)
+        for f in range(self.numFilters):
+            sum = 0
+            for i in range(len(outputDerivatives[0])):
+                for j in range(len(outputDerivatives[0][0])):
+                    #print("Dims", outputDerivatives.shape)
+                    #print("Access Dims,", f,i,j)
+                    sum+= outputDerivatives[f][i][j]
+            res[f] = sum
+        return res
 
     def inputDerivatives(self, input, outputDerivatives):
         res = np.zeros_like(input)
         w = int(self.kernelSize/2)
         paddedDer = np.pad(outputDerivatives,((0,0), (w,w), (w,w)),'constant', constant_values=0)
        
-        for filter in range(self.numFilters):
-            for i in range(len(input)):
-                for j in range(len(input[0])):
+        for c in range(self.numChannels):
+            for i in range(len(input[0])):
+                for j in range(len(input[0][0])):
                     sum = 0
-                    for row in range(self.kernelSize):
-                        for col in range(self.kernelSize):
-                            sum+= self.weights[filter, row, col]*paddedDer[filter, i-row+2*w, j-col+2*w]
-                    res[i,j] = sum
+                    for f in range(self.numFilters):
+                        for row in range(w,-w-1, -1):
+                            for col in range(w, -w-1, -1):
+                                
+                                thing1 = paddedDer[f, i+row+w, j+col+w]
+                                thing2 = self.weights[f, c, -row + w , -col+w]
+                                #print("For res(", c, i, j, "), I added ", thing2, "*", thing1)
+                                sum+= thing1*thing2
+                    res[c, i ,j] = sum
         return res
+
 
 class elemMulLayer(combineLayer):
     def __init__(self):
@@ -284,6 +311,7 @@ class sumSquareError(resultLayer):
     def __init__(self):
         return
     def eval(self, guess, answer):
+        #print(answer, guess)
         return sum((answer - guess)**2)
     def inputDerivatives(self, guess, answer):
         return 2*(answer - guess)

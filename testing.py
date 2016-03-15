@@ -58,16 +58,67 @@ def lstmTest():
         lstm.doUpdate()
         print("iteration", iteration, ": ", IterationError)
 
-def convTest ():
-    data = np.random.random((100, 2))
+
+def convTest2():
+    data = np.random.random((100, 2,1))
     labels = np.array(list(map(test, data)))
-    conv = layers.convLayer(3, 1, weights=np.array([[[.1,.2,.3],[.4,.5,.6], [.7,.8,.9]]]), bias = [0])
-    testData = np.array([[0.0,1,], [4,5]])
-    outputDers = np.array([[[1,1], [2,1]]])
-    print(conv.eval(testData))
-    print(conv.weightDerivatives(testData, outputDers))
-    print(conv.biasDerivative(testData, outputDers))
-    print(conv.inputDerivatives(testData, outputDers))
+    conv1 = layers.convLayer(3, 3, 1)
+    dense = layers.denseLayer(6, 1)
+    cost = layers.sumSquareError()
+    for i in range(100):
+        itError = 0
+        for datum, label in zip(data, labels):
+            val1 = conv1.eval([datum])
+            #print("Val1", val1)
+            shmush = val1.reshape((6))
+            #print("Shmush", shmush)
+            val2 = dense.eval(shmush)
+            error = cost.eval(val2, label)
+            #print("Error", error)
+            itError += error
+            Derror = cost.setUpdate(val2, label)
+            #print("Derror", Derror)
+            Ddense = dense.setUpdate(shmush, Derror)
+            #print("DDense", Ddense)
+            DunShmush = Ddense.reshape((3, 2,1))
+            #print("DUnShmush", DunShmush)
+            D1 = conv1.setUpdate([datum], DunShmush)
+            conv1.doUpdate()
+            dense.doUpdate()
+        print(i, ": ", itError)
+
+def convTest3():
+    data = np.random.random((10, 2,1))
+    labels = np.array(list(map(test, data)))
+    inp = layers.convLayer(3, 3, 1)
+    conv1 = layers.convLayer(3, 3, 3)
+    dense = layers.denseLayer(6, 1)
+    cost = layers.sumSquareError()
+    for i in range(100):
+        itError = 0
+        for dat, label in zip(data, labels):
+            datum = inp.eval([dat])
+            val1 = conv1.eval(datum)
+            #print("Val1", val1.shape)
+            shmush = val1.reshape((6))
+            #print("Shmush", shmush)
+            val2 = dense.eval(shmush)
+            error = cost.eval(val2, label)
+            #print("Error", error)
+            itError += error
+            Derror =  cost.setUpdate(val2, label)
+            #print("Derror", Derror)
+            Ddense = dense.setUpdate(shmush, Derror)
+            #print("DDense", Ddense)
+            DunShmush = Ddense.reshape((3, 2, 1))
+            #print("Unshmush", DunShmush.shape)
+            #print("DUnShmush", DunShmush)
+            D1 = conv1.setUpdate(datum, DunShmush)
+            DInp = inp.setUpdate([dat], D1)
+        conv1.doUpdate(lr= .001)
+        dense.doUpdate(lr = .001)
+        inp.doUpdate(lr = .001)
+        print(i, ": ", itError)
 
 def denseTest():
     data = np.random.random((100, 2))
@@ -82,12 +133,10 @@ def denseTest():
             value = sig.eval(value_pre)
             error = cost.eval(value, label)
             itError += error
-            Derror = cost.inputDerivatives(value, label)
-            Derror = sig.inputDerivatives(value_pre, Derror)
-            DW = dense.weightDerivatives(datum, Derror)
-            Dbias = dense.biasDerivative(Derror)
-            dense.weights += 0.1*DW
-            dense.bias  += 0.1* Dbias
+            Derror = cost.setUpdate(value, label)
+            Derror = sig.setUpdate(value_pre, Derror)
+            dense.setUpdate(datum, Derror)
         print("Iteration ", i, " Error : ",itError)
+        dense.doUpdate()
     print(dense.weights)
     print(dense.bias)
