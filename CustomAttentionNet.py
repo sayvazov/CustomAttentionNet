@@ -131,7 +131,7 @@ def test(inputs):
         return 0
 
 def attentionTest():
-    data = np.random.random((30, 2, 2))
+    data = np.random.random((300, 2, 2))
     labs = np.array(list(map(test, data)))
     labels = []
     for label in labs:
@@ -166,7 +166,7 @@ def attentionTest():
                 #print(round)
                 dGlimpse = net.setUpdate([glim[2-round]], loc[2-round], dLoc[-1], dError)
                 dLoc.append(glimpser.setUpdate(datum, loc[2-round], dGlimpse))
-            net.doUpdate(.001)
+            net.doUpdate(.0001)
         print("Error in epoch ", epoch, " is ",epochError)
 
 
