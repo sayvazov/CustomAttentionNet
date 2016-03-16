@@ -1,4 +1,4 @@
-import layers
+﻿import layers
 import glimpse
 import testing
 import numpy as np
@@ -131,7 +131,7 @@ def test(inputs):
         return 0
 
 def attentionTest():
-    data = np.random.random((300, 2, 2))
+    data = np.random.random((10, 2, 2))
     labs = np.array(list(map(test, data)))
     labels = []
     for label in labs:
@@ -141,14 +141,16 @@ def attentionTest():
             labels.append([1,0])
     net = AttentionNet()
     glimpser = glimpseNet()
-    errorAnalyzer = layers.crossEntropy()
+    errorAnalyzer = layers.sumSquareError()
     firstLoc = [0,0]
-    for epoch in range(100):
-        #print("Started Epcoh ", epoch)
+    for epoch in range(500):
+        print("Started Epcoh ", epoch)
         epochError = 0.0
+        epochCorrect = 0
         for datum, label in zip(data, labels):
             loc = [[0,0]]
             glim = []
+            correct = False
             #print("Started forward prop round ")
             for round in range(3):
                 #print(round)
@@ -156,19 +158,34 @@ def attentionTest():
                 glim.append(glimpser.eval(datum, loc[-1]))
                 nextLoc, soft = net.eval([glim[-1]], loc[-1])
                 loc.append(nextLoc)
+            if label[0] == 1 and soft[0] > soft[1]:
+                correct = True
+                epochCorrect+=1
+                #print("Correct :", soft[0], ">", soft[1])
+            elif label[1] ==1 and soft[1] > soft[0]:
+                correct = True
+                epochCorrect+=1
+                #print("Correct :", soft[0], "<", soft[1])
+            else:
+                #print("Incorrect :", soft[0], " ", soft[1])
+                pass
             error = errorAnalyzer.eval(soft, label)
             epochError += error
             dError = errorAnalyzer.inputDerivatives(soft, label)
             #print(dError)
             dLoc = [[0,0]]
             #print("Started back prop round ")
-            for round in range(3):
-                #print(round)
-                dGlimpse = net.setUpdate([glim[2-round]], loc[2-round], dLoc[-1], dError)
-                dLoc.append(glimpser.setUpdate(datum, loc[2-round], dGlimpse))
-            net.doUpdate(.0001)
+            #if not correct:
+            if True:
+                for round in range(3):
+                    #print(round)
+                    dGlimpse = net.setUpdate([glim[2-round]], loc[2-round], dLoc[-1], dError)
+                    dLoc.append(glimpser.setUpdate(datum, loc[2-round], dGlimpse))
+            net.doUpdate(0.1)
         print("Error in epoch ", epoch, " is ",epochError)
+        #print("Epoch Accuracty is ", epochCorrect)
 
+#testing.convTest3()
 
 attentionTest()
 
